@@ -419,6 +419,28 @@ Open source already leads the world there. Instead, our sovereign R&D must focus
 developing homegrown RISC-V Confidential Computing TEEs (Vertical 2), hardware PQC acceleration units (Vertical 6), 
 and establishing domestic secure tape-out capabilities for Silicon Root of Trust IP (Vertical 1)."*
 
+---
+
+## Top Open-Source HPC Frameworks for Telemetry & Power
+
+**1. GEOPM (Global Extensible Open Power Manager)**
+
+* **The Project:** Hosted under LF Energy and developed by Intel/HPC community, GEOPM is deployed on world-class supercomputers like *Aurora*.
+* **Why it matters:** It dynamically detects application execution phases (e.g., distinguishing between compute-heavy loops and MPI synchronization stalls) and automatically reallocates power budgets across heterogeneous CPUs and GPUs in real time to optimize energy efficiency.
+
+**2. Variorum (Lawrence Livermore National Laboratory)**
+
+* **The Project:** Developed under the US Department of Energy’s Exascale Computing Project (ECP) as part of the HPC PowerStack initiative.
+* **Why it matters:** Variorum provides a single, vendor-agnostic C library that exposes unified APIs for power/energy telemetry and hardware control dials across Intel, AMD, NVIDIA, ARM, and IBM architectures.
+
+**3. Kepler (Kubernetes Efficient Power Level Exporter)**
+
+* **The Project:** A CNCF sandbox project built natively around eBPF.
+* **Why it matters:** Kepler uses eBPF probes to extract real-time energy metrics (Intel RAPL, AMD RAPL, NVIDIA NVML, ACPI) and attribute exact power draw down to individual threads, processes, or container workloads with near-zero OS overhead.
+
+---
+
+
 # Summary: Building Sovereign HPC through Open Source Collaboration and Open Standards
 ---
 When we discuss "technological sovereignty," there is a common misconception that sovereignty requires isolation—that to truly own our compute stack, we must write every line of software and design every gate of silicon from line zero.
@@ -455,5 +477,37 @@ If we analyze these six verticals today, the pure software domains—our air-gap
 Instead, our national R&D budget and engineering talent must laser-focus on the **hardware-adjacent gaps**: developing homegrown RISC-V Trusted Execution Environments for Confidential Computing, integrating hardware acceleration for Post-Quantum Cryptography, and securing domestic tape-out capabilities for Silicon Root of Trust IP.
 
 Digital sovereignty is not about building a wall around our technology. It is about building a rock-solid, domestically audited foundation underneath it.
+
+## Points to ponder
+
+**1. Leapfrog via a Two-Tiered Architecture (Don't Reinvent the Wheel)**
+Avoid writing a sovereign OS from scratch. Use an enterprise baseline (Debian or Enterprise Linux) for login/management nodes, and build minimal, diskless, RAM-booted kernel images via the **Yocto Project** for compute nodes.
+
+**2. Eliminate OS Jitter at the Kernel Level**
+Address kernel design by configuring compute nodes with `NO_HZ_FULL` (tickless kernel), `isolcpus` to pin application threads, and locked 1GB Huge Pages. This strips out background system noise, dedicating 99%+ of CPU cycles strictly to scientific loops.
+
+**3. Hard NUMA-Aware Memory & Socket Binding**
+Match kernel scheduling to hardware topology. Enforce strict NUMA memory locality (`numactl`/`hwloc`) and CPU affinity to keep memory access on the local socket—essential for preventing latency bottlenecks on high-density multi-socket chips like C-DAC’s AUM processor.
+
+**4. Single Build Pipeline Across Heterogeneous Hardware**
+Maintain a single, unified upstream kernel build target that compiles for standard x86 and ARM today, while natively supporting **DIR-V (VEGA/SHAKTI)** RISC-V architectures and CHIPS Alliance reference cores (BOOM, VeeR) tomorrow.
+
+**5. Offload Operating System Overhead to DPUs & SmartNICs**
+Offload background OS daemons, parallel storage clients, and network stack processing directly onto DPUs and SmartNICs. This isolates the main host CPU and accelerators (GPUs/NPUs/FPGAs) entirely for workload processing.
+
+**6. Standardize on Open Fabrics (UEC)**
+Integrate native Linux kernel drivers for the **Ultra Ethernet Consortium (UEC)** standard. UEC brings low-latency Remote Direct Memory Access (RDMA) and multipath packet reordering to commodity Ethernet, eliminating single-vendor InfiniBand lock-in.
+
+**7. Enforce Cluster Determinism with Ansible (IaC)**
+Apply Infrastructure-as-Code (using Ansible HPC stacks like Merustack) across **both** head nodes and stateless compute node images. Declarative automation ensures zero configuration drift and auditable deployment across thousands of nodes.
+
+**8. Real-Time Hardware Telemetry & Heterogeneous Power Management**
+Expose unified kernel interfaces for hardware telemetry and power capping. The OS must dynamically balance power envelopes and thermals across heterogeneous compute nodes (CPUs, GPUs, NPUs, FPGAs) in real time.
+
+**9. Domestic Root-of-Trust and Firmware Validation**
+Replace foreign commercial signing keys with a national Public Key Infrastructure (PKI). Pair UEFI Secure Boot with an open Silicon Root-of-Trust (like Caliptra) to cryptographically measure and validate firmware before the kernel ever boots.
+
+**10. Sovereignty Equals Pipeline Control, Not Isolation**
+True digital sovereignty does not mean closed-source development. It means controlling the domestic binary build pipeline, self-hosting air-gapped repositories, owning the cryptographic signing keys, and actively driving open-governance standards.
 
 By uniting open-source software, open-governance silicon, and total national control over our binary build pipelines, India will deliver a sovereign HPC platform that is exascale-ready, globally interoperable, and unassailable in its security.
