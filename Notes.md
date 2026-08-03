@@ -501,13 +501,98 @@ For true independence, our hardware stack should align with globally governed, v
 
 ---
 
-## 3. The Software Stack: Two-Tiered OS & Automation
+## 3. The Software Stack: Two-Tiered OS, Reproducible Images & Automation
 
-Moving up to the software layer, a supercomputing OS cannot be treated like a desktop distribution. We require a clean, two-tiered execution model:
+The software layer of a sovereign HPC platform should not be designed like a conventional enterprise Linux deployment. A supercomputer has two very different personalities: a service-rich management plane and a noise-free compute plane. Treating both the same leads to operational complexity, performance jitter, larger attack surface, and configuration drift. A practical sovereign HPC architecture should therefore use a two-tiered operating system model.
 
-* **Management Tier:** Uses established, community-governed enterprise baselines (like Debian or Enterprise Linux) on login and storage nodes to provide instant access to scientific tools.
-* **Compute Tier:** Uses the Yocto Project to build minimal, diskless, tickless (`NO_HZ_FULL`) Linux kernels that run directly in RAM. This strips out background system daemons, eliminating "OS jitter" so that 99%+ of processor cycles are dedicated purely to parallel computing loops.
-* **The Orchestration Glue:** To bind these nodes together, we utilize declarative Infrastructure-as-Code. Open-source Ansible stacks (like Merustack) automate and enforce identical configuration states across both head nodes and compute node images, eliminating configuration drift across thousands of cores.
+**Management Tier: Stable, Service-Rich Linux**
+
+The management, login, storage, and development nodes should run a stable, community-governed enterprise Linux baseline such as Debian, Rocky Linux, AlmaLinux, or another nationally certified downstream distribution. These nodes need the full service stack: user authentication, LDAP or FreeIPA, monitoring, logging, Slurm controllers, storage services, package mirrors, container registries, CI runners, documentation portals, and developer tooling. This tier is where the cluster is administered, audited, patched, and integrated with institutional workflows. It should prioritize maintainability, security updates, user experience, and compatibility with scientific software ecosystems.
+
+**Compute Tier: Minimal, Diskless, Deterministic Linux**
+
+The compute nodes should be treated differently. Their purpose is not general-purpose computing. Their purpose is to run tightly coupled MPI, OpenMP, GPU, AI, and simulation workloads with maximum determinism. For this tier, the better model is a minimal, diskless, RAM-booted Linux image built through the Yocto Project or a similar reproducible image-build system. Yocto is specifically designed to create custom Linux-based systems across hardware architectures, rather than being a fixed Linux distribution itself. [yoctoproject.org]. This compute image should include only what is required to boot, authenticate, mount necessary filesystems, expose telemetry, join the scheduler, and launch workloads. Unnecessary services, background timers, desktop components, dynamic update daemons, and uncontrolled agents should be removed. Kernel configuration should focus on HPC determinism: tickless operation, CPU isolation, NUMA awareness, huge pages, controlled interrupt placement, deterministic boot, and reproducible kernel configuration.
+
+The goal is not merely a smaller OS image. The goal is a controlled execution envelope where every compute node boots into the same known state, with the same kernel, same drivers, same firmware expectations, same security posture, and same scheduler integration.
+
+**Scheduler and Resource Management Layer**
+
+Above the OS, the workload manager becomes the control plane for scientific execution. Slurm remains the practical default for near-term sovereign HPC deployments because it is open source, highly scalable, widely used in Linux HPC clusters, and provides resource allocation, job execution, monitoring, queuing, accounting, reservations, topology-aware placement, and policy enforcement. [slurm.schedmd.com]
+
+However, the long-term architecture should also track Flux Framework, especially for heterogeneous and workflow-heavy environments. Flux is designed as a next-generation resource management framework for HPC clusters, supercomputers, cloud systems, and complex workflows. Its graph-based and hierarchical scheduling model is relevant for future systems where workloads span CPUs, GPUs, AI accelerators, storage tiers, containers, and workflow pipelines. Flux has also been accepted into the High Performance Software Foundation, which strengthens its relevance as an open HPC ecosystem project. [flux-frame...thedocs.io] [hpsf.io]
+
+A sovereign software stack should therefore adopt:
+
+1. Slurm as the production scheduler baseline
+2. Flux as an advanced workflow and future-scheduling research track
+3. Topology-aware scheduling for NUMA, GPU, NIC, and interconnect locality
+4. Accounting and fair-share policies for national research facilities
+5. Power-aware and energy-aware scheduling as systems scale
+6. Scientific Software Supply Chain
+
+The next critical layer is the scientific software supply chain. HPC users do not run the OS directly. They run compilers, MPI stacks, math libraries, Python environments, AI frameworks, solvers, visualization tools, and domain applications. This is where uncontrolled software sprawl can destroy reproducibility. A sovereign HPC stack should standardize on Spack for scientific software deployment. Spack is a flexible package manager designed for supercomputers and scientific computing environments, supporting multiple versions, configurations, platforms, compilers, and dependency variants. This matters because different research groups often need different compiler versions, MPI implementations, math-library variants, CUDA or ROCm builds, and architecture-specific optimizations. [computing.llnl.gov], [spack.io]
+
+The recommended model is:
+
+1. Build compiler, MPI, math, AI, and scientific application stacks through Spack.
+2. Publish internally certified Spack environments as versioned software stacks.
+3. Generate Lmod or Environment Modules for users.
+4. Maintain domestic binary caches and source mirrors.
+5. Rebuild the same software stack for x86, ARM, and future RISC-V targets.
+6. Validate key applications using benchmark suites before promoting a stack to production.
+7. This makes the software environment reproducible, auditable, and portable across heterogeneous hardware generations.
+
+**Containers Without Losing HPC Performance**
+
+Containers should be supported, but they should not replace the scheduler or the OS architecture. In HPC, containers are primarily a packaging and reproducibility mechanism, not the orchestration layer. Apptainer or similar HPC-oriented container runtimes should be used for user workloads, while Slurm or Flux continues to control placement, accounting, resource limits, and job launch.
+
+The container policy should be strict:
+
+Containers must be signed.
+Base images must come from domestic registries.
+GPU, NIC, MPI, and filesystem passthrough must be validated.
+Rootless execution should be preferred.
+Images should be scanned and archived for reproducibility.
+Production workloads should use approved base images, not arbitrary internet pulls.
+This allows scientific users to bring complex application environments without compromising cluster control or supply-chain integrity.
+
+**Automation and Configuration Governance**
+
+Automation is the glue that keeps the two-tiered architecture consistent. Infrastructure-as-Code should define the full cluster state: management nodes, login nodes, storage nodes, scheduler configuration, user policy, compute image generation, package mirrors, container registries, security baselines, telemetry agents, and network tuning.
+
+Ansible-based automation, such as Merustack, can serve as the declarative deployment layer. Its role should not be limited to installing packages. It should enforce cluster intent:
+
+Which services run on management nodes
+Which services are forbidden on compute nodes
+Which kernel parameters are applied
+Which hugepage and CPU-isolation settings are active
+Which scheduler partitions exist
+Which software stacks are exposed
+Which firmware, driver, and NIC versions are certified
+Which monitoring and audit agents are enabled
+Which security controls are mandatory
+For compute nodes, automation should not mutate live systems randomly. Instead, the preferred model is image-based lifecycle management: build, sign, test, publish, boot, monitor, and retire images. This aligns better with diskless RAM-booted compute nodes and prevents silent configuration drift.
+
+**Observability, Telemetry and Power Awareness**
+
+A sovereign HPC software stack must also include observability from day one. At national scale, performance failures are not always application bugs. They may come from OS jitter, NUMA imbalance, thermal throttling, network congestion, filesystem contention, noisy daemons, firmware regressions, or degraded links.
+
+The platform should collect:
+
+Per-node health
+Scheduler state
+Job-level CPU, GPU, memory, and network usage
+Power and thermal telemetry
+Filesystem and metadata-server load
+NIC counters and congestion signals
+Kernel noise and interrupt distribution
+Application performance counters
+This telemetry should feed both operations and research. Over time, it enables anomaly detection, power-aware scheduling, benchmark reproducibility, and evidence-driven hardware-software co-design.
+
+The Result: A Reproducible Sovereign Runtime
+
+### Bottom line
+The software stack should therefore be summarized as follows: Use a stable enterprise Linux management plane, a minimal Yocto-built deterministic compute plane, Slurm for production scheduling, Flux for next-generation workflow research, Spack for reproducible scientific software, signed containers for portability, and Ansible-based automation for full cluster governance. This approach gives India a practical path to sovereign HPC without reinventing Linux. It keeps the management layer usable, the compute layer deterministic, the software stack reproducible, and the full cluster lifecycle auditable.
 
 ---
 
